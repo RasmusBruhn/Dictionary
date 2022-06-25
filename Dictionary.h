@@ -65,11 +65,25 @@ void DIC_DestroyLinkList(DIC_LinkList *LinkList)
 
     if (LinkList->next != NULL)
         DIC_DestroyLinkList(LinkList->next);
+
+    free(LinkList);
 }
 
 void DIC_DestroyDict(DIC_Dict *Dict)
 {
+    if (Dict->hash != NULL)
+        HAS_DestroyHash(Dict->hash);
 
+    if (Dict->list != NULL)
+    {
+        for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Dict->length; List < EndList; ++List)
+            if (*List != NULL)
+                DIC_DestroyLinkList(*List);
+
+        free(Dict->list);
+    }
+
+    free(Dict);
 }
 
 #endif
