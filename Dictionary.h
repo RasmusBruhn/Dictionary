@@ -12,8 +12,13 @@
 #include <Error.h>
 
 enum _DIC_ErrorID {
-    _DIC_ERRORID_NONE = 0x600000000
+    _DIC_ERRORID_NONE = 0x600000000,
+    _DIC_ERRORID_CREATEDIC_MALLOC = 0x600010200,
+    _DIC_ERRORID_CREATEDIC_HASH = 0x600010201
 };
+
+#define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
+#define _DIC_ERRORMES_CREATEHASH "Unable to create hash"
 
 typedef struct __DIC_Dict DIC_Dict;
 typedef struct __DIC_LinkList DIC_LinkList;
@@ -32,11 +37,40 @@ struct __DIC_Dict {
     size_t length;
 };
 
+// Creates a empty dictionary
+// Size: The size of the dict list, this should be about the same size as the expected number of entries
+DIC_Dict *DIC_CreateDict(size_t Size);
+
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
 
 void DIC_DestroyLinkList(DIC_LinkList *LinkList);
 void DIC_DestroyDict(DIC_Dict *Dict);
+
+DIC_Dict *DIC_CreateDict(size_t Size)
+{
+    // Allocate memory
+    DIC_Dict *Dict = (DIC_Dict *)malloc(sizeof(DIC_Dict));
+
+    if (Dict == NULL)
+    {
+        _DIC_AddErrorForeign(_DIC_ERRORID_CREATEDIC_MALLOC, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_Dict));
+        return NULL;
+    }
+
+    // Initialize
+    DIC_InitStructDict(Dict);
+
+    // Create hash
+    Dict->hash = HAS_CreateHash(1, 0);
+
+    if (Dict->hash == NULL)
+    {
+        _DIC_AddErrorForeign(_DIC_ERRORID_CREATEDIC_HASH, HAS_GetError(), _DIC_ERRORMES_CREATEHASH);
+        DIC_DestroyDict(Dict);
+        return NULL;
+    }
+}
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
 {
