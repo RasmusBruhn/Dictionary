@@ -1,0 +1,4 @@
+#ifndef DICTIONARY_H_INCLUDED
+#define DICTIONARY_H_INCLUDED
+
+#endif
