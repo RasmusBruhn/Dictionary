@@ -15,32 +15,57 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_NONE = 0x600000000,
     _DIC_ERRORID_CREATEDIC_MALLOC = 0x600010200,
     _DIC_ERRORID_CREATEDIC_HASH = 0x600010201,
-    _DIC_ERRORID_CREATEDIC_MALLOCLIST = 0x600010202
+    _DIC_ERRORID_CREATEDIC_MALLOCLIST = 0x600010202,
+    _DIC_ERRORID_ADDITEM_MALLOCITEM = 0x600020200,
+    _DIC_ERRORID_ADDITEM_MALLOCKEY = 0x600020201,
+    _DIC_ERRORID_DESTROYDICT_NODICT = 0x600030100
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _DIC_ERRORMES_CREATEHASH "Unable to create hash"
+#define _DIC_ERRORMES_WRONGDICTCOUNT "Attempting to destroy dict, but none is supposed to exist"
 
+enum __DIC_Type {
+    DIC_TYPE_NONE = 0x00000,
+    DIC_TYPE_STRING = 0x00001,
+    DIC_TYPE_INT = 0x00002,
+    DIC_TYPE_UINT = 0x00003,
+    DIC_TYPE_FLOAT = 0x00004
+};
+
+typedef enum __DIC_Type DIC_Type;
 typedef struct __DIC_Dict DIC_Dict;
 typedef struct __DIC_LinkList DIC_LinkList;
 
 struct __DIC_LinkList {
     uint8_t *key;
     size_t keyLength;
+    uint32_t type;
     void *value;
     bool pointer;
     DIC_LinkList *next;
 };
 
 struct __DIC_Dict {
-    HAS_Hash *hash;
     DIC_LinkList **list;
     size_t length;
 };
 
+HAS_Hash *_DIC_HashTable = NULL;
+size_t _DIC_DictCount = 0;
+
 // Creates a empty dictionary
 // Size: The size of the dict list, this should be about the same size as the expected number of entries
 DIC_Dict *DIC_CreateDict(size_t Size);
+
+// Add an item to a dictionary
+// Dict: The dictionary to add the item to
+// Key: The key for the item
+// KeyLength: The size of the key
+// Value: A pointer to the value to store
+// ValueLength: The size of the value data, only used if copy is true
+// Copy: If false then it will save the pointer to the value, if true it will allocate some space and save a copy of the value
+bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, void *Value, size_t ValueLength, bool Copy);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
@@ -62,16 +87,6 @@ DIC_Dict *DIC_CreateDict(size_t Size)
     // Initialize
     DIC_InitStructDict(Dict);
 
-    // Create hash
-    Dict->hash = HAS_CreateHash(1, 0);
-
-    if (Dict->hash == NULL)
-    {
-        _DIC_AddErrorForeign(_DIC_ERRORID_CREATEDIC_HASH, HAS_GetError(), _DIC_ERRORMES_CREATEHASH);
-        DIC_DestroyDict(Dict);
-        return NULL;
-    }
-
     // Get memory for the list
     Dict->length = Size;
     Dict->list = (DIC_LinkList **)malloc(sizeof(DIC_LinkList *) * Size);
@@ -87,13 +102,72 @@ DIC_Dict *DIC_CreateDict(size_t Size)
     for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Size; List < EndList; ++List)
         *List = NULL;
 
+    // Create hash if needed
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+    
+    if (_DIC_HashTable == NULL)
+    {
+        _DIC_HashTable = HAS_CreateHash(1, 0);
+
+        if (_DIC_HashTable == NULL)
+        {
+            _DIC_AddErrorForeign(_DIC_ERRORID_CREATEDIC_HASH, HAS_GetError(), _DIC_ERRORMES_CREATEHASH);
+            DIC_DestroyDict(Dict);
+            return NULL;
+        }
+    }
+
+    ++_DIC_DictCount;
+
     return Dict;
+}
+
+bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, bool Copy)
+{
+    // Hash the key
+    uint64_t HashKey = HAS_HashValue(Dict->hash, Key, KeyLength);
+
+    // Find the position of the item
+    DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
+
+    while (*ItemPos != NULL)
+    {
+        // Check if it is a dublicate
+        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+            break;
+
+        // Get the next item
+        ItemPos = &(*ItemPos)->next;
+    }
+
+    // Copy the key
+    uint8_t *CopyKey = (uint8_t *)malloc(sizeof(uint8_t) * KeyLength);
+
+    if (CopyKey == NULL)
+    {
+        _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(uint8_t) * KeyLength);
+        return false;
+    }
+
+    // If it did not find the item, create a new item
+    if (*ItemPos == NULL)
+    {
+        DIC_LinkList *NewItem = (DIC_LinkList *)malloc(sizeof(DIC_LinkList));
+
+        if (NewItem == NULL)
+        {
+            _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCITEM, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_LinkList));
+            return false;
+        }
+    }
 }
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
 {
     Struct->key = NULL;
     Struct->keyLength = 0;
+    Struct->type = DIC_TYPE_NONE;
     Struct->value = NULL;
     Struct->pointer = false;
     Struct->next = NULL;
@@ -101,7 +175,6 @@ void DIC_InitStructLinkList(DIC_LinkList *Struct)
 
 void DIC_InitStructDict(DIC_Dict *Struct)
 {
-    Struct->hash = NULL;
     Struct->list = NULL;
     Struct->length = 0;
 }
@@ -123,9 +196,7 @@ void DIC_DestroyLinkList(DIC_LinkList *LinkList)
 
 void DIC_DestroyDict(DIC_Dict *Dict)
 {
-    if (Dict->hash != NULL)
-        HAS_DestroyHash(Dict->hash);
-
+    // Destroy the dict
     if (Dict->list != NULL)
     {
         for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Dict->length; List < EndList; ++List)
@@ -136,6 +207,25 @@ void DIC_DestroyDict(DIC_Dict *Dict)
     }
 
     free(Dict);
+
+    // Destroy the hash if needed
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+
+    if (_DIC_DictCount == 0)
+    {
+        _DIC_SetError(_DIC_ERRORID_DESTROYDICT_NODICT, _DIC_ERRORMES_WRONGDICTCOUNT);
+        return;
+    }
+
+    --_DIC_DictCount;
+
+    // Destroy hash
+    if (_DIC_DictCount == 0 && _DIC_HashTable != NULL)
+    {
+        HAS_DestroyHash(_DIC_HashTable);
+        _DIC_HashTable = NULL;
+    }
 }
 
 #endif
