@@ -42,6 +42,13 @@ enum __DIC_Type {
     DIC_TYPE_FLOAT = 0x00004
 };
 
+enum __DIC_Mode {
+    DIC_MODE_POINTER,
+    DIC_MODE_COPY,
+    DIC_MODE_INSERT
+};
+
+typedef enum __DIC_Mode DIC_Mode;
 typedef enum __DIC_Type DIC_Type;
 typedef struct __DIC_Dict DIC_Dict;
 typedef struct __DIC_LinkList DIC_LinkList;
@@ -72,7 +79,7 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Value: A pointer to the value to store
 // ValueLength: The size of the value data, only used if copy is true
 // Copy: If false then it will save the pointer to the value, if true it will allocate some space and save a copy of the value
-bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, bool Copy);
+bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, DIC_Mode Mode);
 
 // Remove an item from a dictionary
 // Dict: The dictionary to remove an item from
@@ -154,7 +161,7 @@ DIC_Dict *DIC_CreateDict(size_t Size)
     return Dict;
 }
 
-bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, bool Copy)
+bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, DIC_Mode Mode)
 {
     extern HAS_Hash *_DIC_HashTable;
     extern size_t _DIC_DictCount;
@@ -184,7 +191,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
     // Copy the value
     void *CopyValue = Value;
 
-    if (Copy)
+    if (Mode == DIC_MODE_COPY)
     {
         CopyValue = malloc(ValueLength);
 
@@ -206,7 +213,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
         if (CopyKey == NULL)
         {
             _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(uint8_t) * KeyLength);
-            if (Copy)  
+            if (Mode == DIC_MODE_COPY)
                 free(CopyValue);
             return false;
         }
@@ -219,7 +226,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
         {
             _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCITEM, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_LinkList));
             free(CopyKey);
-            if (Copy)  
+            if (Mode == DIC_MODE_COPY)
                 free(CopyValue);
             return false;
         }
@@ -238,7 +245,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
 
     (*ItemPos)->value = CopyValue;
     (*ItemPos)->type = Type;
-    (*ItemPos)->pointer = !Copy;
+    (*ItemPos)->pointer = (Mode == DIC_MODE_POINTER);
 
     return true;
 }
