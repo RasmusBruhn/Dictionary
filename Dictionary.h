@@ -18,12 +18,15 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_CREATEDIC_MALLOCLIST = 0x600010202,
     _DIC_ERRORID_ADDITEM_MALLOCITEM = 0x600020200,
     _DIC_ERRORID_ADDITEM_MALLOCKEY = 0x600020201,
+    _DIC_ERRORID_ADDITEM_HASHTABLE = 0x600020202,
+    _DIC_ERRORID_ADDITEM_MALLOCVALUE = 0x600020203,
     _DIC_ERRORID_DESTROYDICT_NODICT = 0x600030100
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _DIC_ERRORMES_CREATEHASH "Unable to create hash"
 #define _DIC_ERRORMES_WRONGDICTCOUNT "Attempting to destroy dict, but none is supposed to exist"
+#define _DIC_ERRORMES_NOHASHTABLE "No hash table is available (Expected number of dicts: %lu)"
 
 enum __DIC_Type {
     DIC_TYPE_NONE = 0x00000,
@@ -125,8 +128,17 @@ DIC_Dict *DIC_CreateDict(size_t Size)
 
 bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, bool Copy)
 {
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+
+    if (_DIC_HashTable == NULL)
+    {
+        _DIC_SetError(_DIC_ERRORID_ADDITEM_HASHTABLE, _DIC_ERRORMES_NOHASHTABLE, _DIC_DictCount);
+        return NULL;
+    }
+
     // Hash the key
-    uint64_t HashKey = HAS_HashValue(Dict->hash, Key, KeyLength);
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
 
     // Find the position of the item
     DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
@@ -141,26 +153,66 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
         ItemPos = &(*ItemPos)->next;
     }
 
-    // Copy the key
-    uint8_t *CopyKey = (uint8_t *)malloc(sizeof(uint8_t) * KeyLength);
+    // Copy the value
+    void *CopyValue = Value;
 
-    if (CopyKey == NULL)
+    if (Copy)
     {
-        _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(uint8_t) * KeyLength);
-        return false;
+        CopyValue = malloc(ValueLength);
+
+        if (CopyValue == NULL)
+        {
+            _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCVALUE, strerror(errno), _DIC_ERRORMES_MALLOC, ValueLength);
+            return false;
+        }
+
+        memcpy(CopyValue, Value, ValueLength);
     }
 
     // If it did not find the item, create a new item
     if (*ItemPos == NULL)
     {
+        // Copy the key
+        uint8_t *CopyKey = (uint8_t *)malloc(sizeof(uint8_t) * KeyLength);
+
+        if (CopyKey == NULL)
+        {
+            _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(uint8_t) * KeyLength);
+            if (Copy)  
+                free(CopyValue);
+            return false;
+        }
+
+        memcpy(CopyKey, Key, sizeof(uint8_t) * KeyLength);
+
         DIC_LinkList *NewItem = (DIC_LinkList *)malloc(sizeof(DIC_LinkList));
 
         if (NewItem == NULL)
         {
             _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCITEM, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_LinkList));
+            free(CopyKey);
+            if (Copy)  
+                free(CopyValue);
             return false;
         }
+
+        DIC_InitStructLinkList(NewItem);
+
+        // Set values
+        NewItem->key = CopyKey;
+        NewItem->keyLength = KeyLength;
+        *ItemPos = NewItem;
     }
+
+    // Remove old value
+    if (!(*ItemPos)->pointer && (*ItemPos)->value != NULL)
+        free((*ItemPos)->value);
+
+    (*ItemPos)->value = CopyValue;
+    (*ItemPos)->type = Type;
+    (*ItemPos)->pointer = !Copy;
+
+    return true;
 }
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
@@ -169,7 +221,7 @@ void DIC_InitStructLinkList(DIC_LinkList *Struct)
     Struct->keyLength = 0;
     Struct->type = DIC_TYPE_NONE;
     Struct->value = NULL;
-    Struct->pointer = false;
+    Struct->pointer = true;
     Struct->next = NULL;
 }
 
