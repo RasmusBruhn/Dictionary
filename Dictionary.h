@@ -14,7 +14,8 @@
 enum _DIC_ErrorID {
     _DIC_ERRORID_NONE = 0x600000000,
     _DIC_ERRORID_CREATEDIC_MALLOC = 0x600010200,
-    _DIC_ERRORID_CREATEDIC_HASH = 0x600010201
+    _DIC_ERRORID_CREATEDIC_HASH = 0x600010201,
+    _DIC_ERRORID_CREATEDIC_MALLOCLIST = 0x600010202
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -70,6 +71,23 @@ DIC_Dict *DIC_CreateDict(size_t Size)
         DIC_DestroyDict(Dict);
         return NULL;
     }
+
+    // Get memory for the list
+    Dict->length = Size;
+    Dict->list = (DIC_LinkList **)malloc(sizeof(DIC_LinkList *) * Size);
+
+    if (Dict->list == NULL)
+    {
+        _DIC_AddErrorForeign(_DIC_ERRORID_CREATEDIC_MALLOCLIST, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_LinkList *) * Size);
+        DIC_DestroyDict(Dict);
+        return NULL;
+    }
+
+    // Initialize list
+    for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Size; List < EndList; ++List)
+        *List = NULL;
+
+    return Dict;
 }
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
