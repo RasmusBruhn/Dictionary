@@ -54,9 +54,6 @@ struct __DIC_Dict {
     size_t length;
 };
 
-HAS_Hash *_DIC_HashTable = NULL;
-size_t _DIC_DictCount = 0;
-
 // Creates a empty dictionary
 // Size: The size of the dict list, this should be about the same size as the expected number of entries
 DIC_Dict *DIC_CreateDict(size_t Size);
@@ -65,16 +62,41 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Dict: The dictionary to add the item to
 // Key: The key for the item
 // KeyLength: The size of the key
+// Type: The key type
 // Value: A pointer to the value to store
 // ValueLength: The size of the value data, only used if copy is true
 // Copy: If false then it will save the pointer to the value, if true it will allocate some space and save a copy of the value
-bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, void *Value, size_t ValueLength, bool Copy);
+bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, bool Copy);
+
+// Remove an item from a dictionary
+// Dict: The dictionary to remove an item from
+// Key: The key for the item
+// KeyLength: The size of the key
+// Type: The key type
+bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+
+// Get an item from a dictionary
+// Dict: The dictionary to remove an item from
+// Key: The key for the item
+// KeyLength: The size of the key
+// Type: The key type
+void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+
+// Checks if an item exists in a dictionary
+// Dict: The dictionary to remove an item from
+// Key: The key for the item
+// KeyLength: The size of the key
+// Type: The key type
+bool *DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
 
 void DIC_DestroyLinkList(DIC_LinkList *LinkList);
 void DIC_DestroyDict(DIC_Dict *Dict);
+
+HAS_Hash *_DIC_HashTable = NULL;
+size_t _DIC_DictCount = 0;
 
 DIC_Dict *DIC_CreateDict(size_t Size)
 {
