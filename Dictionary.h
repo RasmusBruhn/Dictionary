@@ -20,13 +20,19 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_ADDITEM_MALLOCKEY = 0x600020201,
     _DIC_ERRORID_ADDITEM_HASHTABLE = 0x600020202,
     _DIC_ERRORID_ADDITEM_MALLOCVALUE = 0x600020203,
-    _DIC_ERRORID_DESTROYDICT_NODICT = 0x600030100
+    _DIC_ERRORID_DESTROYDICT_NODICT = 0x600030100,
+    _DIC_ERRORID_CHECKITEM_HASHTABLE = 0x600040100,
+    _DIC_ERRORID_GETITEM_HASHTABLE = 0x600050200,
+    _DIC_ERRORID_GETITEM_NOITEM = 0x600050201,
+    _DIC_ERRORID_REMOVEITEM_HASHTABLE = 0x600060200,
+    _DIC_ERRORID_REMOVEITEM_NOITEM = 0x600060201
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _DIC_ERRORMES_CREATEHASH "Unable to create hash"
 #define _DIC_ERRORMES_WRONGDICTCOUNT "Attempting to destroy dict, but none is supposed to exist"
 #define _DIC_ERRORMES_NOHASHTABLE "No hash table is available (Expected number of dicts: %lu)"
+#define _DIC_ERRORMES_NOITEM "Unable to locate item"
 
 enum __DIC_Type {
     DIC_TYPE_NONE = 0x00000,
@@ -87,7 +93,7 @@ void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t
 // Key: The key for the item
 // KeyLength: The size of the key
 // Type: The key type
-bool *DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
@@ -235,6 +241,111 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
     (*ItemPos)->pointer = !Copy;
 
     return true;
+}
+
+void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+{
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+
+    if (_DIC_HashTable == NULL)
+    {
+        _DIC_SetError(_DIC_ERRORID_GETITEM_HASHTABLE, _DIC_ERRORMES_NOHASHTABLE, _DIC_DictCount);
+        return NULL;
+    }
+
+    // Hash the key
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+
+    // Find the item
+    DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
+
+    while (*ItemPos != NULL)
+    {
+        // Check if it found it
+        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+            return (*ItemPos)->value;
+
+        // Get the next item
+        ItemPos = &(*ItemPos)->next;
+    }
+
+    _DIC_SetError(_DIC_ERRORID_GETITEM_NOITEM, _DIC_ERRORMES_NOITEM);
+    return NULL;
+}
+
+bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+{
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+
+    if (_DIC_HashTable == NULL)
+    {
+        _DIC_SetError(_DIC_ERRORID_REMOVEITEM_HASHTABLE, _DIC_ERRORMES_NOHASHTABLE, _DIC_DictCount);
+        return false;
+    }
+
+    // Hash the key
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+
+    // Find the item
+    DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
+
+    while (*ItemPos != NULL)
+    {
+        // Check if it found it
+        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+            break;
+
+        // Get the next item
+        ItemPos = &(*ItemPos)->next;
+    }
+
+    // Make sure that it found something
+    if (*ItemPos == NULL)
+    {
+        _DIC_SetError(_DIC_ERRORID_REMOVEITEM_NOITEM, _DIC_ERRORMES_NOITEM);
+        return false;
+    }
+
+    // Remove the item
+    DIC_LinkList *NextList = (*ItemPos)->next;
+    (*ItemPos)->next = NULL;
+
+    DIC_DestroyLinkList(*ItemPos);
+    *ItemPos = NextList;
+
+    return true;
+}
+
+bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+{
+    extern HAS_Hash *_DIC_HashTable;
+    extern size_t _DIC_DictCount;
+
+    if (_DIC_HashTable == NULL)
+    {
+        _DIC_SetError(_DIC_ERRORID_CHECKITEM_HASHTABLE, _DIC_ERRORMES_NOHASHTABLE, _DIC_DictCount);
+        return false;
+    }
+
+    // Hash the key
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+
+    // Find the item
+    DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
+
+    while (*ItemPos != NULL)
+    {
+        // Check if it found it
+        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+            return true;
+
+        // Get the next item
+        ItemPos = &(*ItemPos)->next;
+    }
+
+    return false;
 }
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
