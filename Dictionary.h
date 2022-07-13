@@ -26,7 +26,8 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_GETITEM_NOITEM = 0x600050201,
     _DIC_ERRORID_REMOVEITEM_HASHTABLE = 0x600060200,
     _DIC_ERRORID_REMOVEITEM_NOITEM = 0x600060201,
-    _DIC_ERRORID_ADDLIST_ADDITEM = 0x600070200
+    _DIC_ERRORID_ADDLIST_ADDITEM = 0x600070200,
+    _DIC_ERRORID_COPYDICT_CREATE = 0x600080200
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -35,6 +36,7 @@ enum _DIC_ErrorID {
 #define _DIC_ERRORMES_NOHASHTABLE "No hash table is available (Expected number of dicts: %lu)"
 #define _DIC_ERRORMES_NOITEM "Unable to locate item"
 #define _DIC_ERRORMES_ADDITEM "Unable to add item"
+#define _DIC_ERRORMES_CREATEDICT "Unable to create new dict"
 
 enum __DIC_Mode {
     DIC_MODE_POINTER,
@@ -382,6 +384,22 @@ bool DIC_CheckItem(DIC_Dict *Dict, const char *Key)
     }
 
     return false;
+}
+
+DIC_Dict *DIC_CopyDict(DIC_Dict *Dict)
+{
+    // Create a new dict
+    DIC_Dict *NewDict = DIC_CreateDict(Dict->length);
+
+    if (NewDict == NULL)
+    {
+        _DIC_AddError(_DIC_ERRORID_COPYDICT_CREATE, _DIC_ERRORMES_CREATEDICT);
+        return NULL;
+    }
+
+    // Go through and copy all of the items
+
+    return NewDict;
 }
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
