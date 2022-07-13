@@ -72,31 +72,31 @@ int main(int argc, char **argv)
     }
 
     // Add elements to dict
-    if (!DIC_AddItem(Dict, "First", strlen("First") + 1, DIC_TYPE_STRING, "Value1", strlen("Value1") + 1, DIC_MODE_COPY))
+    if (!DIC_AddItem(Dict, "First", "Value1", strlen("Value1") + 1, DIC_MODE_COPY))
     {
         printf("Unable to add element 1 to dict: %s\n", DIC_GetError());
         return 0;
     }
 
-    if (!DIC_AddItem(Dict, "Second", strlen("Second") + 1, DIC_TYPE_STRING, "Value2", strlen("Value2") + 1, DIC_MODE_COPY))
+    if (!DIC_AddItem(Dict, "Second", "Value2", strlen("Value2") + 1, DIC_MODE_COPY))
     {
         printf("Unable to add element 2 to dict: %s\n", DIC_GetError());
         return 0;
     }
 
-    if (!DIC_AddItem(Dict, "Third", strlen("Third") + 1, DIC_TYPE_STRING, "Value3", strlen("Value3") + 1, DIC_MODE_COPY))
+    if (!DIC_AddItem(Dict, "Third", "Value3", strlen("Value3") + 1, DIC_MODE_COPY))
     {
         printf("Unable to add element 3 to dict: %s\n", DIC_GetError());
         return 0;
     }
 
-    if (!DIC_AddItem(Dict, "Third", strlen("Third") + 1, DIC_TYPE_STRING, "Value4", strlen("Value4") + 1, DIC_MODE_COPY))
+    if (!DIC_AddItem(Dict, "Third", "Value4", strlen("Value4") + 1, DIC_MODE_COPY))
     {
         printf("Unable to add element 4 to dict: %s\n", DIC_GetError());
         return 0;
     }
 
-    if (!DIC_AddItem(Dict, "Firstaa", strlen("Firstaa") + 1, DIC_TYPE_STRING, "Value5", strlen("Value5") + 1, DIC_MODE_COPY))
+    if (!DIC_AddItem(Dict, "Firstaa", "Value5", strlen("Value5") + 1, DIC_MODE_COPY))
     {
         printf("Unable to add element 5 to dict: %s\n", DIC_GetError());
         return 0;
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
     char *Value;
 
-    Value = DIC_GetItem(Dict, "First", strlen("First") + 1, DIC_TYPE_STRING);
+    Value = DIC_GetItem(Dict, "First");
 
     if (Value == NULL)
     {
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
 
     printf("Got value 1: %s\n", Value);
 
-    Value = DIC_GetItem(Dict, "Second", strlen("Second") + 1, DIC_TYPE_STRING);
+    Value = DIC_GetItem(Dict, "Second");
 
     if (Value == NULL)
     {
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 
     printf("Got value 2: %s\n", Value);
 
-    Value = DIC_GetItem(Dict, "Third", strlen("Third") + 1, DIC_TYPE_STRING);
+    Value = DIC_GetItem(Dict, "Third");
 
     if (Value == NULL)
     {
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
     printf("Got value 3: %s\n", Value);
 
-    Value = DIC_GetItem(Dict, "Firstaa", strlen("Firstaa") + 1, DIC_TYPE_STRING);
+    Value = DIC_GetItem(Dict, "Firstaa");
 
     if (Value == NULL)
     {
@@ -145,13 +145,37 @@ int main(int argc, char **argv)
     printf("Got value 5: %s\n", Value);
 
     // Check other functions
-    if (!DIC_CheckItem(Dict, "First", strlen("First") + 1, DIC_TYPE_STRING))
+    if (!DIC_CheckItem(Dict, "First"))
     {
         printf("Could not find element\n");
         return 0;
     }
 
     // Destroy all dicts
+    DIC_DestroyDict(Dict);
+
+    // Check the diversity
+    Dict = DIC_CreateDict(8);
+
+    char Key[9] = "uint64_t";
+
+    for (uint64_t i = 0; i < 100; ++i)
+    {
+        *(uint64_t *)Key = i;
+        DIC_AddItem(Dict, Key, NULL, sizeof(void *), DIC_MODE_POINTER);
+    }
+
+    // Print the distribution
+    for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Dict->length; List < EndList; ++List)
+    {
+        size_t Size = 0;
+
+        for (DIC_LinkList *Link = *List; Link != NULL; Link = Link->next)
+            ++Size;
+
+        printf("Element: %lu, Count: %lu\n", (uint64_t)(List - Dict->list), Size);
+    }
+
     DIC_DestroyDict(Dict);
 
     printf("Finished without errors\n");

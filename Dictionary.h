@@ -34,14 +34,6 @@ enum _DIC_ErrorID {
 #define _DIC_ERRORMES_NOHASHTABLE "No hash table is available (Expected number of dicts: %lu)"
 #define _DIC_ERRORMES_NOITEM "Unable to locate item"
 
-enum __DIC_Type {
-    DIC_TYPE_NONE = 0x00000,
-    DIC_TYPE_STRING = 0x00001,
-    DIC_TYPE_INT = 0x00002,
-    DIC_TYPE_UINT = 0x00003,
-    DIC_TYPE_FLOAT = 0x00004
-};
-
 enum __DIC_Mode {
     DIC_MODE_POINTER,
     DIC_MODE_COPY,
@@ -54,9 +46,7 @@ typedef struct __DIC_Dict DIC_Dict;
 typedef struct __DIC_LinkList DIC_LinkList;
 
 struct __DIC_LinkList {
-    uint8_t *key;
-    size_t keyLength;
-    uint32_t type;
+    char *key;
     void *value;
     bool pointer;
     DIC_LinkList *next;
@@ -79,28 +69,28 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Value: A pointer to the value to store
 // ValueLength: The size of the value data, only used if copy is true
 // Copy: If false then it will save the pointer to the value, if true it will allocate some space and save a copy of the value
-bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, DIC_Mode Mode);
+bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLength, DIC_Mode Mode);
 
 // Remove an item from a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
 // KeyLength: The size of the key
 // Type: The key type
-bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+bool DIC_RemoveItem(DIC_Dict *Dict, const char *Key);
 
 // Get an item from a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
 // KeyLength: The size of the key
 // Type: The key type
-void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+void *DIC_GetItem(DIC_Dict *Dict, const char *Key);
 
 // Checks if an item exists in a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
 // KeyLength: The size of the key
 // Type: The key type
-bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type);
+bool DIC_CheckItem(DIC_Dict *Dict, const char *Key);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
@@ -161,7 +151,7 @@ DIC_Dict *DIC_CreateDict(size_t Size)
     return Dict;
 }
 
-bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type, void *Value, size_t ValueLength, DIC_Mode Mode)
+bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLength, DIC_Mode Mode)
 {
     extern HAS_Hash *_DIC_HashTable;
     extern size_t _DIC_DictCount;
@@ -173,7 +163,8 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
     }
 
     // Hash the key
-    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+    size_t KeyLength = strlen(Key);
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, (uint8_t *)Key, KeyLength);
 
     // Find the position of the item
     DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
@@ -181,7 +172,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
     while (*ItemPos != NULL)
     {
         // Check if it is a dublicate
-        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+        if (strcmp((*ItemPos)->key, Key) == 0)
             break;
 
         // Get the next item
@@ -208,17 +199,17 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
     if (*ItemPos == NULL)
     {
         // Copy the key
-        uint8_t *CopyKey = (uint8_t *)malloc(sizeof(uint8_t) * KeyLength);
+        char *CopyKey = (char *)malloc(sizeof(char) * (KeyLength + 1));
 
         if (CopyKey == NULL)
         {
-            _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(uint8_t) * KeyLength);
+            _DIC_AddErrorForeign(_DIC_ERRORID_ADDITEM_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(char) * (KeyLength + 1));
             if (Mode == DIC_MODE_COPY)
                 free(CopyValue);
             return false;
         }
 
-        memcpy(CopyKey, Key, sizeof(uint8_t) * KeyLength);
+        strcpy(CopyKey, Key);
 
         DIC_LinkList *NewItem = (DIC_LinkList *)malloc(sizeof(DIC_LinkList));
 
@@ -235,7 +226,6 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
 
         // Set values
         NewItem->key = CopyKey;
-        NewItem->keyLength = KeyLength;
         *ItemPos = NewItem;
     }
 
@@ -244,13 +234,12 @@ bool DIC_AddItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t 
         free((*ItemPos)->value);
 
     (*ItemPos)->value = CopyValue;
-    (*ItemPos)->type = Type;
     (*ItemPos)->pointer = (Mode == DIC_MODE_POINTER);
 
     return true;
 }
 
-void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+void *DIC_GetItem(DIC_Dict *Dict, const char *Key)
 {
     extern HAS_Hash *_DIC_HashTable;
     extern size_t _DIC_DictCount;
@@ -262,7 +251,8 @@ void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t
     }
 
     // Hash the key
-    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+    size_t KeyLength = strlen(Key);
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, (uint8_t *)Key, KeyLength);
 
     // Find the item
     DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
@@ -270,7 +260,7 @@ void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t
     while (*ItemPos != NULL)
     {
         // Check if it found it
-        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+        if (strcmp((*ItemPos)->key, Key) == 0)
             return (*ItemPos)->value;
 
         // Get the next item
@@ -281,7 +271,7 @@ void *DIC_GetItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t
     return NULL;
 }
 
-bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+bool DIC_RemoveItem(DIC_Dict *Dict, const char *Key)
 {
     extern HAS_Hash *_DIC_HashTable;
     extern size_t _DIC_DictCount;
@@ -293,7 +283,8 @@ bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32
     }
 
     // Hash the key
-    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+    size_t KeyLength = strlen(Key);
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, (uint8_t *)Key, KeyLength);
 
     // Find the item
     DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
@@ -301,7 +292,7 @@ bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32
     while (*ItemPos != NULL)
     {
         // Check if it found it
-        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+        if (strcmp((*ItemPos)->key, Key) == 0)
             break;
 
         // Get the next item
@@ -325,7 +316,7 @@ bool DIC_RemoveItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32
     return true;
 }
 
-bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_t Type)
+bool DIC_CheckItem(DIC_Dict *Dict, const char *Key)
 {
     extern HAS_Hash *_DIC_HashTable;
     extern size_t _DIC_DictCount;
@@ -337,7 +328,8 @@ bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_
     }
 
     // Hash the key
-    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, Key, KeyLength);
+    size_t KeyLength = strlen(Key);
+    uint64_t HashKey = HAS_HashValue(_DIC_HashTable, (uint8_t *)Key, KeyLength);
 
     // Find the item
     DIC_LinkList **ItemPos = Dict->list + HashKey % Dict->length;
@@ -345,7 +337,7 @@ bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_
     while (*ItemPos != NULL)
     {
         // Check if it found it
-        if (Type == (*ItemPos)->type && KeyLength == (*ItemPos)->keyLength && memcmp((*ItemPos)->key, Key, KeyLength) == 0)
+        if (strcmp((*ItemPos)->key, Key) == 0)
             return true;
 
         // Get the next item
@@ -358,8 +350,6 @@ bool DIC_CheckItem(DIC_Dict *Dict, const uint8_t *Key, size_t KeyLength, uint32_
 void DIC_InitStructLinkList(DIC_LinkList *Struct)
 {
     Struct->key = NULL;
-    Struct->keyLength = 0;
-    Struct->type = DIC_TYPE_NONE;
     Struct->value = NULL;
     Struct->pointer = true;
     Struct->next = NULL;
@@ -377,7 +367,7 @@ void DIC_DestroyLinkList(DIC_LinkList *LinkList)
     if (LinkList->key != NULL)
         free(LinkList->key);
 
-    if (LinkList->pointer && LinkList->value != NULL)
+    if (!LinkList->pointer && LinkList->value != NULL)
         free(LinkList->value);
 
     if (LinkList->next != NULL)
