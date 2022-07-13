@@ -25,7 +25,8 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_GETITEM_HASHTABLE = 0x600050200,
     _DIC_ERRORID_GETITEM_NOITEM = 0x600050201,
     _DIC_ERRORID_REMOVEITEM_HASHTABLE = 0x600060200,
-    _DIC_ERRORID_REMOVEITEM_NOITEM = 0x600060201
+    _DIC_ERRORID_REMOVEITEM_NOITEM = 0x600060201,
+    _DIC_ERRORID_ADDLIST_ADDITEM = 0x600070200
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -33,6 +34,7 @@ enum _DIC_ErrorID {
 #define _DIC_ERRORMES_WRONGDICTCOUNT "Attempting to destroy dict, but none is supposed to exist"
 #define _DIC_ERRORMES_NOHASHTABLE "No hash table is available (Expected number of dicts: %lu)"
 #define _DIC_ERRORMES_NOITEM "Unable to locate item"
+#define _DIC_ERRORMES_ADDITEM "Unable to add item"
 
 enum __DIC_Mode {
     DIC_MODE_POINTER,
@@ -69,8 +71,14 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
 bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLength, DIC_Mode Mode);
 
-// Adds a list of items to a dictionary
-bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, size_t *ValueLengths, DIC_Mode Mode);
+// Adds a list of items to a dictionary, upon failure it may leave new items in the dict
+// Dict: The dictionary to add the item to
+// Keys: The keys for the items
+// Count: The number of items
+// Values: A pointer to the values to store
+// ValueLengths: The size of the value data, only used if copy is true
+// Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
+bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, const size_t *ValueLengths, DIC_Mode Mode);
 
 // Remove an item from a dictionary
 // Dict: The dictionary to remove an item from
@@ -86,6 +94,14 @@ void *DIC_GetItem(DIC_Dict *Dict, const char *Key);
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
 bool DIC_CheckItem(DIC_Dict *Dict, const char *Key);
+
+// Copies a dictionary
+// Dict: The dict to copy
+DIC_Dict *DIC_CopyDict(DIC_Dict *Dict);
+
+// Returns the number of elements in the dictionary
+// Dict: The dict to get the length of
+size_t DIC_DictLength(DIC_Dict *Dict);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
 void DIC_InitStructDict(DIC_Dict *Struct);
@@ -230,6 +246,32 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
 
     (*ItemPos)->value = CopyValue;
     (*ItemPos)->pointer = (Mode == DIC_MODE_POINTER);
+
+    return true;
+}
+
+bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, const size_t *ValueLengths, DIC_Mode Mode)
+{
+    // Setup ValueLength if not needed
+    size_t Length = 0;
+
+    if (Mode != DIC_MODE_COPY)
+        ValueLengths = &Length;
+
+    // Go through all of the items and add them
+    for (const char **NewKeys = Keys, **EndKeys = Keys + Count; NewKeys < EndKeys; ++NewKeys, ++Values)
+    {
+        // Add item
+        if (!DIC_AddItem(Dict, *NewKeys, *Values, *ValueLengths, Mode))
+        {
+            _DIC_AddError(_DIC_ERRORID_ADDLIST_ADDITEM, _DIC_ERRORMES_ADDITEM);
+            return false;
+        }
+
+        // Increase the value length
+        if (Mode == DIC_MODE_COPY)
+            ++ValueLengths;
+    }
 
     return true;
 }
