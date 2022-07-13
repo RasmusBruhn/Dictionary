@@ -157,6 +157,12 @@ int main(int argc, char **argv)
     // Check the diversity
     Dict = DIC_CreateDict(8);
 
+    if (Dict == NULL)
+    {
+        printf("Unable to create dictionary: %s\n", DIC_GetError());
+        return 0;
+    }
+
     char Key[9] = "uint64_t";
 
     for (uint64_t i = 0; i < 100; ++i)
@@ -175,6 +181,31 @@ int main(int argc, char **argv)
 
         printf("Element: %lu, Count: %lu\n", (uint64_t)(List - Dict->list), Size);
     }
+
+    DIC_DestroyDict(Dict);
+
+    // Try to add a list
+    Dict = DIC_CreateDict(8);
+
+    if (Dict == NULL)
+    {
+        printf("Unable to create dictionary: %s\n", DIC_GetError());
+        return 0;
+    }
+
+    char *KeyList[] = {"List1", "List2", "List3", "List4"};
+    char *ValueList[] = {"Value1", "Value2", "Value3", "Value4"};
+
+    if (!DIC_AddList(Dict, (const char **)KeyList, 4, (void **)ValueList, NULL, DIC_MODE_POINTER))
+    {
+        printf("Unable to add list to dictionary: %s\n", DIC_GetError());
+        return 0;
+    }
+
+    printf("List1: %s\n", DIC_GetItem(Dict, KeyList[0]));
+    printf("List2: %s\n", DIC_GetItem(Dict, KeyList[1]));
+    printf("List3: %s\n", DIC_GetItem(Dict, KeyList[2]));
+    printf("List4: %s\n", DIC_GetItem(Dict, KeyList[3]));
 
     DIC_DestroyDict(Dict);
 
