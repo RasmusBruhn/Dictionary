@@ -64,32 +64,27 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Add an item to a dictionary
 // Dict: The dictionary to add the item to
 // Key: The key for the item
-// KeyLength: The size of the key
-// Type: The key type
 // Value: A pointer to the value to store
 // ValueLength: The size of the value data, only used if copy is true
-// Copy: If false then it will save the pointer to the value, if true it will allocate some space and save a copy of the value
+// Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
 bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLength, DIC_Mode Mode);
+
+// Adds a list of items to a dictionary
+bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, size_t *ValueLengths, DIC_Mode Mode);
 
 // Remove an item from a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
-// KeyLength: The size of the key
-// Type: The key type
 bool DIC_RemoveItem(DIC_Dict *Dict, const char *Key);
 
 // Get an item from a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
-// KeyLength: The size of the key
-// Type: The key type
 void *DIC_GetItem(DIC_Dict *Dict, const char *Key);
 
 // Checks if an item exists in a dictionary
 // Dict: The dictionary to remove an item from
 // Key: The key for the item
-// KeyLength: The size of the key
-// Type: The key type
 bool DIC_CheckItem(DIC_Dict *Dict, const char *Key);
 
 void DIC_InitStructLinkList(DIC_LinkList *Struct);
