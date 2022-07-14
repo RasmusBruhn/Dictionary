@@ -460,6 +460,18 @@ DIC_Dict *DIC_CopyDict(DIC_Dict *Dict)
     return NewDict;
 }
 
+size_t DIC_DictLength(DIC_Dict *Dict)
+{
+    size_t Length = 0;
+
+    // Go through the entire dict
+    for (DIC_LinkList **List = Dict->list, **EndList = Dict->list + Dict->length; List < EndList; ++List)
+        for (DIC_LinkList *Link = *List; Link != NULL; Link = Link->next)
+            ++Length;
+
+    return Length;
+}
+
 void DIC_InitLinkList(DIC_LinkList *Struct)
 {
     Struct->key = NULL;

@@ -182,6 +182,9 @@ int main(int argc, char **argv)
         printf("Element: %lu, Count: %lu\n", (uint64_t)(List - Dict->list), Size);
     }
 
+    // Get total length
+    printf("Dict Length: %lu\n", DIC_DictLength(Dict));
+
     DIC_DestroyDict(Dict);
 
     // Try to add a list
