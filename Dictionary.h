@@ -44,7 +44,8 @@ enum _DIC_ErrorID {
 enum __DIC_Mode {
     DIC_MODE_POINTER,
     DIC_MODE_COPY,
-    DIC_MODE_INSERT
+    DIC_MODE_INSERT,
+    DIC_MODE_LIST
 };
 
 typedef enum __DIC_Mode DIC_Mode;
@@ -83,8 +84,8 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
 // Count: The number of items
 // Values: A pointer to the values to store
 // ValueLengths: The size of the value data, only used if mode is not DIC_MODE_POINTER
-// Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
-bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, const size_t *ValueLengths, DIC_Mode Mode);
+// Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_MODE_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_MODE_COPY, then it will copy the value pointet to, if DIC_MODE_LIST then ValueLengths is a pointer to the size of each element and it uses POINTER mode for the location of each element
+bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void *Values, const size_t *ValueLengths, DIC_Mode Mode);
 
 // Remove an item from a dictionary
 // Dict: The dictionary to remove an item from
@@ -257,7 +258,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
     return true;
 }
 
-bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, const size_t *ValueLengths, DIC_Mode Mode)
+bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void *Values, const size_t *ValueLengths, DIC_Mode Mode)
 {
     // Setup ValueLength if not needed
     size_t Length = 0;
@@ -266,17 +267,32 @@ bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values,
         ValueLengths = &Length;
 
     // Go through all of the items and add them
-    for (const char **NewKeys = Keys, **EndKeys = Keys + Count; NewKeys < EndKeys; ++NewKeys, ++Values)
+    for (const char **NewKeys = Keys, **EndKeys = Keys + Count; NewKeys < EndKeys; ++NewKeys)
     {
+        // Find the value
+        void *Value = NULL;
+
+        if (Mode == DIC_MODE_LIST)
+        {
+            Value = Values;
+            Values = (void *)((uint8_t *)Values + *ValueLengths);
+        }
+
+        else
+        {
+            Value = *((void **)Values);
+            Values = (void *)((void **)Values + 1);
+        }
+
         // Add item
-        if (!DIC_AddItem(Dict, *NewKeys, *Values, *ValueLengths, Mode))
+        if (!DIC_AddItem(Dict, *NewKeys, Value, *ValueLengths, Mode))
         {
             _DIC_AddError(_DIC_ERRORID_ADDLIST_ADDITEM, _DIC_ERRORMES_ADDITEM);
             return false;
         }
 
         // Increase the value length
-        if (Mode != DIC_MODE_POINTER)
+        if (Mode == DIC_MODE_COPY || Mode == DIC_MODE_INSERT)
             ++ValueLengths;
     }
 
