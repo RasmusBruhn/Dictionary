@@ -27,7 +27,10 @@ enum _DIC_ErrorID {
     _DIC_ERRORID_REMOVEITEM_HASHTABLE = 0x600060200,
     _DIC_ERRORID_REMOVEITEM_NOITEM = 0x600060201,
     _DIC_ERRORID_ADDLIST_ADDITEM = 0x600070200,
-    _DIC_ERRORID_COPYDICT_CREATE = 0x600080200
+    _DIC_ERRORID_COPYDICT_CREATE = 0x600080200,
+    _DIC_ERRORID_COPYDICT_MALLOCLINK = 0x600080201,
+    _DIC_ERRORID_COPYDICT_MALLOCKEY = 0x600080202,
+    _DIC_ERRORID_COPYDICT_MALLOCVALUE = 0x600080203
 };
 
 #define _DIC_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -50,10 +53,11 @@ typedef struct __DIC_Dict DIC_Dict;
 typedef struct __DIC_LinkList DIC_LinkList;
 
 struct __DIC_LinkList {
-    char *key;
-    void *value;
-    bool pointer;
-    DIC_LinkList *next;
+    char *key; // The key for the item
+    void *value; // A pointer to the value
+    size_t size; // The size of the value, only used if pointer is false
+    bool pointer; // If it is false then it contains a pointer to private information which must be freed when dict is destroyed
+    DIC_LinkList *next; // The next element in the list
 };
 
 struct __DIC_Dict {
@@ -69,7 +73,7 @@ DIC_Dict *DIC_CreateDict(size_t Size);
 // Dict: The dictionary to add the item to
 // Key: The key for the item
 // Value: A pointer to the value to store
-// ValueLength: The size of the value data, only used if copy is true
+// ValueLength: The size of the value data, only used if mode is not DIC_MODE_POINTER
 // Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
 bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLength, DIC_Mode Mode);
 
@@ -78,7 +82,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
 // Keys: The keys for the items
 // Count: The number of items
 // Values: A pointer to the values to store
-// ValueLengths: The size of the value data, only used if copy is true
+// ValueLengths: The size of the value data, only used if mode is not DIC_MODE_POINTER
 // Mode: If DIC_MODE_POINTER, then it will just save the pointer, if DIC_INSERT, then it will save the pointer and free it when destroying the dict, if DIC_COPY, then it will copy the value pointet to
 bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values, const size_t *ValueLengths, DIC_Mode Mode);
 
@@ -105,8 +109,8 @@ DIC_Dict *DIC_CopyDict(DIC_Dict *Dict);
 // Dict: The dict to get the length of
 size_t DIC_DictLength(DIC_Dict *Dict);
 
-void DIC_InitStructLinkList(DIC_LinkList *Struct);
-void DIC_InitStructDict(DIC_Dict *Struct);
+void DIC_InitLinkList(DIC_LinkList *Struct);
+void DIC_InitDict(DIC_Dict *Struct);
 
 void DIC_DestroyLinkList(DIC_LinkList *LinkList);
 void DIC_DestroyDict(DIC_Dict *Dict);
@@ -126,7 +130,7 @@ DIC_Dict *DIC_CreateDict(size_t Size)
     }
 
     // Initialize
-    DIC_InitStructDict(Dict);
+    DIC_InitDict(Dict);
 
     // Get memory for the list
     Dict->length = Size;
@@ -235,7 +239,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
             return false;
         }
 
-        DIC_InitStructLinkList(NewItem);
+        DIC_InitLinkList(NewItem);
 
         // Set values
         NewItem->key = CopyKey;
@@ -248,6 +252,7 @@ bool DIC_AddItem(DIC_Dict *Dict, const char *Key, void *Value, size_t ValueLengt
 
     (*ItemPos)->value = CopyValue;
     (*ItemPos)->pointer = (Mode == DIC_MODE_POINTER);
+    (*ItemPos)->size = ValueLength;
 
     return true;
 }
@@ -257,7 +262,7 @@ bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values,
     // Setup ValueLength if not needed
     size_t Length = 0;
 
-    if (Mode != DIC_MODE_COPY)
+    if (Mode == DIC_MODE_POINTER)
         ValueLengths = &Length;
 
     // Go through all of the items and add them
@@ -271,7 +276,7 @@ bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void **Values,
         }
 
         // Increase the value length
-        if (Mode == DIC_MODE_COPY)
+        if (Mode != DIC_MODE_POINTER)
             ++ValueLengths;
     }
 
@@ -398,19 +403,73 @@ DIC_Dict *DIC_CopyDict(DIC_Dict *Dict)
     }
 
     // Go through and copy all of the items
+    for (DIC_LinkList **SrcList = Dict->list, **DstList = NewDict->list, **EndList = Dict->list + Dict->length; SrcList < EndList; ++SrcList, ++DstList)
+        for (DIC_LinkList *SrcLink = *SrcList, **DstLink = DstList; SrcLink != NULL; SrcLink = SrcLink->next, DstLink = &(*DstLink)->next)
+        {
+            // Create new LinkList
+            DIC_LinkList *NewLink = (DIC_LinkList *)malloc(sizeof(DIC_LinkList));
+
+            if (NewLink == NULL)
+            {
+                _DIC_AddErrorForeign(_DIC_ERRORID_COPYDICT_MALLOCLINK, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(DIC_LinkList));
+                DIC_DestroyDict(NewDict);
+                return NULL;
+            }
+
+            DIC_InitLinkList(NewLink);
+
+            // Copy key
+            NewLink->key = (char *)malloc(sizeof(char) * (strlen(SrcLink->key) + 1));
+
+            if (NewLink->key == NULL)
+            {
+                _DIC_AddErrorForeign(_DIC_ERRORID_COPYDICT_MALLOCKEY, strerror(errno), _DIC_ERRORMES_MALLOC, sizeof(char) * (strlen(SrcLink->key) + 1));
+                DIC_DestroyDict(NewDict);
+                DIC_DestroyLinkList(NewLink);
+                return NULL;
+            }
+
+            strcpy(NewLink->key, SrcLink->key);
+
+            // Copy value
+            if (SrcLink->pointer)
+                NewLink->value = SrcLink->value;
+
+            else
+            {
+                NewLink->value = malloc(SrcLink->size);
+
+                if (NewLink->value == NULL)
+                {
+                    _DIC_AddErrorForeign(_DIC_ERRORID_COPYDICT_MALLOCVALUE, strerror(errno), _DIC_ERRORMES_MALLOC, SrcLink->size);
+                    DIC_DestroyDict(NewDict);
+                    DIC_DestroyLinkList(NewLink);
+                    return NULL;
+                }
+
+                memcpy(NewLink->value, SrcLink->value, SrcLink->size);
+            }
+
+            NewLink->pointer = SrcLink->pointer;
+            NewLink->size = SrcLink->size;
+
+            // Add to dict
+            *DstLink = NewLink;
+        }
 
     return NewDict;
 }
 
-void DIC_InitStructLinkList(DIC_LinkList *Struct)
+void DIC_InitLinkList(DIC_LinkList *Struct)
 {
     Struct->key = NULL;
     Struct->value = NULL;
+    Struct->size = 0;
     Struct->pointer = true;
     Struct->next = NULL;
 }
 
-void DIC_InitStructDict(DIC_Dict *Struct)
+void DIC_InitDict(DIC_Dict *Struct)
 {
     Struct->list = NULL;
     Struct->length = 0;

@@ -207,7 +207,22 @@ int main(int argc, char **argv)
     printf("List3: %s\n", DIC_GetItem(Dict, KeyList[2]));
     printf("List4: %s\n", DIC_GetItem(Dict, KeyList[3]));
 
+    // Copy the dict
+    DIC_Dict *CopyDict = DIC_CopyDict(Dict);
+
+    if (CopyDict == NULL)
+    {
+        printf("Unable to copy dict: %s\n", DIC_GetError());
+        return 0;
+    }
+
+    printf("CopyList1: %s\n", DIC_GetItem(CopyDict, KeyList[0]));
+    printf("CopyList2: %s\n", DIC_GetItem(CopyDict, KeyList[1]));
+    printf("CopyList3: %s\n", DIC_GetItem(CopyDict, KeyList[2]));
+    printf("CopyList4: %s\n", DIC_GetItem(CopyDict, KeyList[3]));
+
     DIC_DestroyDict(Dict);
+    DIC_DestroyDict(CopyDict);
 
     printf("Finished without errors\n");
 
