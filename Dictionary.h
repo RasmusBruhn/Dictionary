@@ -271,11 +271,13 @@ bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void *Values, 
     {
         // Find the value
         void *Value = NULL;
+        DIC_Mode UseMode = Mode;
 
         if (Mode == DIC_MODE_LIST)
         {
             Value = Values;
             Values = (void *)((uint8_t *)Values + *ValueLengths);
+            UseMode = DIC_MODE_POINTER;
         }
 
         else
@@ -285,7 +287,7 @@ bool DIC_AddList(DIC_Dict *Dict, const char **Keys, size_t Count, void *Values, 
         }
 
         // Add item
-        if (!DIC_AddItem(Dict, *NewKeys, Value, *ValueLengths, Mode))
+        if (!DIC_AddItem(Dict, *NewKeys, Value, *ValueLengths, UseMode))
         {
             _DIC_AddError(_DIC_ERRORID_ADDLIST_ADDITEM, _DIC_ERRORMES_ADDITEM);
             return false;
